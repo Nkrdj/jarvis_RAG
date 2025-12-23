@@ -43,19 +43,38 @@ class SimpleRAG:
     def load_pdf(self, file_path):
         """
         Reads a PDF file and chunks the text into smaller pieces for embedding.
+        Uses a sliding window approach with sentence/paragraph preservation where possible.
         """
         print(f"Processing PDF: {file_path}")
         try:
             reader = PdfReader(file_path)
             chunks = []
+            current_chunk = ""
             
-            for i, page in enumerate(reader.pages):
+            for page in reader.pages:
                 text = page.extract_text()
-                if text:
-                    page_chunks = [t.strip() for t in text.split('\n\n') if len(t.strip()) > 50]
-                    if not page_chunks and len(text) > 50:
-                        page_chunks = [text]
-                    chunks.extend(page_chunks)
+                if not text:
+                    continue
+                
+                # Split by newline to preserve some structure
+                lines = text.split('\n')
+                for line in lines:
+                    line = line.strip()
+                    if not line:
+                        continue
+                        
+                    # Add line to current chunk
+                    if len(current_chunk) + len(line) < 500:
+                        current_chunk += line + " "
+                    else:
+                        # Chunk is full, save it
+                        chunks.append(current_chunk.strip())
+                        # Start new chunk with overlap (last 50 chars of previous for context flow)
+                        overlap = current_chunk[-50:] if len(current_chunk) > 50 else ""
+                        current_chunk = overlap + line + " "
+
+            if current_chunk:
+                chunks.append(current_chunk.strip())
             
             print(f"Extracted {len(chunks)} chunks from {file_path}")
             self.add_documents(chunks)
@@ -77,12 +96,12 @@ class SimpleRAG:
                 if not text:
                     continue
                     
-                # Simple aggregation: group paragraphs until we hit ~500 chars
                 if len(current_chunk) + len(text) < 500:
-                    current_chunk += text + "\n"
+                    current_chunk += text + " "
                 else:
                     chunks.append(current_chunk.strip())
-                    current_chunk = text + "\n"
+                    overlap = current_chunk[-50:] if len(current_chunk) > 50 else ""
+                    current_chunk = overlap + text + " "
             
             if current_chunk:
                 chunks.append(current_chunk.strip())
@@ -92,12 +111,14 @@ class SimpleRAG:
         except Exception as e:
             print(f"Error reading DOCX {file_path}: {e}")
 
-    def retrieve(self, query, top_k=2):
+    def retrieve(self, query, top_k=3):
         if self.doc_embeddings is None:
             return []
             
         query_embedding = self.encoder.encode([query])
         similarities = cosine_similarity(query_embedding, self.doc_embeddings)[0]
+        
+        # Get top indices
         top_indices = np.argsort(similarities)[-top_k:][::-1]
 
         results = []
@@ -111,18 +132,16 @@ class SimpleRAG:
     def generate_response(self, query, context):
         print("Generating response with LLM...")
         
-        # Improved prompt to reduce hallucinations
-        prompt = f"""Use the context below to answer the question. If the answer isn't in the context, say "I don't know related to that."
+        prompt = f"""Answer the question based strictly on the context below. If the answer is not in the context, say "I cannot answer this based on the provided documents."
 
 Context:
 {context}
 
-Question: 
-{query}
-
+Question: {query}
 Answer:"""
         
-        result = self.generator(prompt, max_new_tokens=100, do_sample=False)
+        # Increased token limit for more detailed answers
+        result = self.generator(prompt, max_new_tokens=200, do_sample=False)
         return result[0]['generated_text']
 
 def main():
