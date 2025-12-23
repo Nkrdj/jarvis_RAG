@@ -1,0 +1,8 @@
+sentence-transformers
+numpy
+scikit-learn
+accelerate
+transformers
+torch
+pypdf
+python-docx
