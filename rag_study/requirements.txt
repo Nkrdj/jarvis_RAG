@@ -8,4 +8,11 @@ pypdf
 python-docx
 fastapi
 uvicorn
-python-multipart
+mcp
+duckduckgo-search
+Pillow
+youtube-transcript-api
+openai
+anthropic
+google-generativeai
+python-dotenv
