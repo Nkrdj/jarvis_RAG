@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>DocMind — RAG Chatbot</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Mono:ital,wght@0,300;0,400;1,300&display=swap" rel="stylesheet"/>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #111118;
+    --surface2: #18181f;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.12);
+    --accent: #7c6cfc;
+    --accent2: #a78bfa;
+    --accent-glow: rgba(124,108,252,0.15);
+    --text: #f0eeff;
+    --text2: #9b97b8;
+    --text3: #5c5878;
+    --success: #34d399;
+    --error: #f87171;
+    --font: 'Syne', sans-serif;
+    --mono: 'DM Mono', monospace;
+  }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    overflow: hidden;
+  }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    padding: 24px 20px;
+    gap: 20px;
+    overflow-y: auto;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .logo-icon {
+    width: 36px; height: 36px;
+    background: var(--accent);
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+  }
+
+  .logo-text { font-size: 20px; font-weight: 800; letter-spacing: -0.5px; }
+  .logo-sub { font-size: 10px; color: var(--text3); font-family: var(--mono); letter-spacing: 0.1em; margin-top: 1px; }
+
+  /* Upload zone */
+  .upload-zone {
+    border: 1.5px dashed var(--border2);
+    border-radius: 14px;
+    padding: 28px 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+  }
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: var(--accent);
+    background: var(--accent-glow);
+  }
+  .upload-zone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+  .upload-icon { font-size: 32px; margin-bottom: 8px; }
+  .upload-title { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+  .upload-hint { font-size: 11px; color: var(--text3); font-family: var(--mono); }
+
+  /* Doc card */
+  .doc-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px;
+    display: none;
+    animation: fadeIn 0.3s ease;
+  }
+  .doc-card.visible { display: block; }
+  .doc-name { font-size: 13px; font-weight: 600; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .doc-meta { font-size: 11px; color: var(--text3); font-family: var(--mono); }
+  .doc-status { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 12px; }
+  .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); animation: pulse 2s infinite; }
+
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  /* Tips */
+  .tips-label { font-size: 11px; font-weight: 600; color: var(--text3); letter-spacing: 0.08em; text-transform: uppercase; }
+  .tip-list { display: flex; flex-direction: column; gap: 6px; }
+  .tip { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-size: 12px; color: var(--text2); cursor: pointer; transition: all 0.15s; line-height: 1.4; }
+  .tip:hover { border-color: var(--accent); color: var(--text); background: var(--accent-glow); }
+
+  /* ── Main ── */
+  .main {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--bg);
+  }
+
+  /* Header */
+  .header {
+    padding: 20px 28px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .header-title { font-size: 15px; font-weight: 600; }
+  .header-sub { font-size: 12px; color: var(--text3); font-family: var(--mono); margin-top: 2px; }
+  .clear-btn {
+    font-family: var(--font);
+    font-size: 12px;
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    color: var(--text2);
+    padding: 7px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .clear-btn:hover { border-color: var(--error); color: var(--error); }
+
+  /* Chat area */
+  .chat-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    scroll-behavior: smooth;
+  }
+
+  /* Empty state */
+  .empty-state {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 12px;
+    opacity: 0.5;
+  }
+  .empty-icon { font-size: 48px; }
+  .empty-title { font-size: 18px; font-weight: 700; }
+  .empty-sub { font-size: 13px; color: var(--text3); max-width: 260px; line-height: 1.6; }
+
+  /* Messages */
+  .message { display: flex; gap: 12px; animation: slideUp 0.25s ease; max-width: 780px; }
+  .message.user { flex-direction: row-reverse; align-self: flex-end; }
+
+  @keyframes slideUp { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+  @keyframes fadeIn  { from{opacity:0} to{opacity:1} }
+
+  .avatar {
+    width: 32px; height: 32px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; flex-shrink: 0;
+  }
+  .avatar.ai { background: var(--accent); }
+  .avatar.user { background: var(--surface2); border: 1px solid var(--border2); }
+
+  .bubble {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px 16px;
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--text);
+    max-width: 640px;
+  }
+  .message.user .bubble {
+    background: var(--accent);
+    border-color: transparent;
+    color: #fff;
+  }
+
+  .sources {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .sources-label { font-size: 10px; color: var(--text3); font-family: var(--mono); letter-spacing: 0.08em; margin-bottom: 2px; }
+  .source-item {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 11px;
+    color: var(--text2);
+    font-family: var(--mono);
+  }
+  .source-page { color: var(--accent2); font-weight: 500; }
+
+  /* Typing indicator */
+  .typing { display: flex; gap: 4px; padding: 8px 4px; align-items: center; }
+  .typing span {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent);
+    animation: bounce 1.2s infinite;
+  }
+  .typing span:nth-child(2) { animation-delay: 0.2s; }
+  .typing span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes bounce { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-6px)} }
+
+  /* Input area */
+  .input-area {
+    padding: 20px 28px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+  }
+
+  .input-wrap {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 14px;
+    display: flex;
+    align-items: flex-end;
+    padding: 12px 16px;
+    gap: 10px;
+    transition: border-color 0.15s;
+  }
+  .input-wrap:focus-within { border-color: var(--accent); }
+
+  textarea {
+    flex: 1;
+    background: none;
+    border: none;
+    outline: none;
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 14px;
+    resize: none;
+    max-height: 120px;
+    line-height: 1.6;
+  }
+  textarea::placeholder { color: var(--text3); }
+
+  .send-btn {
+    width: 36px; height: 36px;
+    background: var(--accent);
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+    flex-shrink: 0;
+    font-size: 16px;
+  }
+  .send-btn:hover { background: var(--accent2); transform: scale(1.05); }
+  .send-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+  /* Loading overlay */
+  .loading-bar {
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    position: fixed;
+    top: 0; left: 0;
+    width: 0%;
+    transition: width 0.3s;
+    z-index: 999;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  /* Processing overlay */
+  .processing {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    text-align: center;
+    font-size: 13px;
+    color: var(--text2);
+    display: none;
+    animation: fadeIn 0.2s;
+  }
+  .processing.visible { display: block; }
+  .processing-bar {
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    margin-top: 10px;
+    overflow: hidden;
+  }
+  .processing-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+    animation: progress 2s ease-in-out infinite;
+  }
+  @keyframes progress { 0%{width:0%} 50%{width:70%} 100%{width:100%} }
+</style>
+</head>
+<body>
+
+<div class="loading-bar" id="loadingBar"></div>
+
+<!-- Sidebar -->
+<aside class="sidebar">
+  <div class="logo">
+    <div class="logo-icon">🧠</div>
+    <div>
+      <div class="logo-text">DocMind</div>
+      <div class="logo-sub">RAG CHATBOT</div>
+    </div>
+  </div>
+
+  <!-- Upload -->
+  <div class="upload-zone" id="uploadZone">
+    <input type="file" id="fileInput" accept=".pdf,.txt,.docx"/>
+    <div class="upload-icon">📄</div>
+    <div class="upload-title">Drop your document</div>
+    <div class="upload-hint">PDF · TXT · DOCX</div>
+  </div>
+
+  <!-- Processing indicator -->
+  <div class="processing" id="processingCard">
+    <div>Embedding document...</div>
+    <div class="processing-bar"><div class="processing-fill"></div></div>
+  </div>
+
+  <!-- Document info -->
+  <div class="doc-card" id="docCard">
+    <div class="doc-name" id="docName">—</div>
+    <div class="doc-meta" id="docMeta">—</div>
+    <div class="doc-status">
+      <div class="status-dot"></div>
+      <span style="font-size:12px;color:#34d399">Ready to chat</span>
+    </div>
+  </div>
+
+  <!-- Sample questions -->
+  <div class="tips-label">Try asking</div>
+  <div class="tip-list" id="tipList">
+    <div class="tip" onclick="useTip(this)">What is this document about?</div>
+    <div class="tip" onclick="useTip(this)">Summarize the key points</div>
+    <div class="tip" onclick="useTip(this)">What are the main conclusions?</div>
+    <div class="tip" onclick="useTip(this)">List the important terms mentioned</div>
+  </div>
+</aside>
+
+<!-- Main chat -->
+<main class="main">
+  <div class="header">
+    <div>
+      <div class="header-title" id="headerTitle">No document loaded</div>
+      <div class="header-sub" id="headerSub">Upload a document to begin</div>
+    </div>
+    <button class="clear-btn" onclick="clearChat()">Clear chat</button>
+  </div>
+
+  <div class="chat-area" id="chatArea">
+    <div class="empty-state" id="emptyState">
+      <div class="empty-icon">📂</div>
+      <div class="empty-title">Upload a document</div>
+      <div class="empty-sub">Upload a PDF, TXT, or DOCX file to start asking questions about its contents.</div>
+    </div>
+  </div>
+
+  <div class="input-area">
+    <div class="input-wrap">
+      <textarea
+        id="questionInput"
+        placeholder="Ask anything about your document..."
+        rows="1"
+        onkeydown="handleKey(event)"
+        oninput="autoResize(this)"
+        disabled
+      ></textarea>
+    </div>
+    <button class="send-btn" id="sendBtn" onclick="sendQuestion()" disabled>➤</button>
+  </div>
+</main>
+
+<script>
+const API = 'http://localhost:8000';
+let sessionId = null;
+let isLoading = false;
+
+// ── File upload ──
+const fileInput = document.getElementById('fileInput');
+const uploadZone = document.getElementById('uploadZone');
+
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadZone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) processFile(file);
+});
+
+fileInput.addEventListener('change', () => {
+  if (fileInput.files[0]) processFile(fileInput.files[0]);
+});
+
+async function processFile(file) {
+  const allowed = ['application/pdf', 'text/plain', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+  if (!allowed.includes(file.type) && !file.name.match(/\.(pdf|txt|docx)$/i)) {
+    alert('Please upload a PDF, TXT, or DOCX file.');
+    return;
+  }
+
+  document.getElementById('processingCard').classList.add('visible');
+  document.getElementById('docCard').classList.remove('visible');
+  setProgress(30);
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  try {
+    const res = await fetch(`${API}/upload`, { method: 'POST', body: formData });
+    const data = await res.json();
+
+    if (!res.ok) throw new Error(data.detail || 'Upload failed');
+
+    sessionId = data.session_id;
+    setProgress(100);
+
+    setTimeout(() => {
+      document.getElementById('processingCard').classList.remove('visible');
+      document.getElementById('docCard').classList.add('visible');
+      document.getElementById('docName').textContent = file.name;
+      document.getElementById('docMeta').textContent = `${data.chunks} chunks · ${(file.size/1024).toFixed(0)} KB`;
+      document.getElementById('headerTitle').textContent = file.name;
+      document.getElementById('headerSub').textContent = `${data.chunks} chunks ready for querying`;
+      document.getElementById('emptyState').style.display = 'none';
+      document.getElementById('questionInput').disabled = false;
+      document.getElementById('sendBtn').disabled = false;
+      document.getElementById('questionInput').focus();
+      setProgress(0);
+    }, 600);
+
+  } catch (err) {
+    document.getElementById('processingCard').classList.remove('visible');
+    setProgress(0);
+    showError('Upload failed: ' + err.message);
+  }
+}
+
+// ── Chat ──
+async function sendQuestion() {
+  const input = document.getElementById('questionInput');
+  const question = input.value.trim();
+  if (!question || !sessionId || isLoading) return;
+
+  isLoading = true;
+  input.value = '';
+  autoResize(input);
+  document.getElementById('sendBtn').disabled = true;
+  setProgress(40);
+
+  addMessage('user', question);
+  const typingId = addTyping();
+
+  try {
+    const res = await fetch(`${API}/ask`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId, question })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Request failed');
+
+    removeTyping(typingId);
+    addMessage('ai', data.answer, data.sources);
+    setProgress(100);
+    setTimeout(() => setProgress(0), 300);
+
+  } catch (err) {
+    removeTyping(typingId);
+    addMessage('ai', '⚠️ ' + err.message);
+    setProgress(0);
+  }
+
+  isLoading = false;
+  document.getElementById('sendBtn').disabled = false;
+  document.getElementById('questionInput').focus();
+}
+
+function addMessage(role, text, sources = []) {
+  const area = document.getElementById('chatArea');
+  const msg = document.createElement('div');
+  msg.className = `message ${role}`;
+
+  const avatar = document.createElement('div');
+  avatar.className = `avatar ${role}`;
+  avatar.textContent = role === 'ai' ? '🧠' : '👤';
+
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  bubble.textContent = text;
+
+  if (sources.length > 0) {
+    const srcDiv = document.createElement('div');
+    srcDiv.className = 'sources';
+    const label = document.createElement('div');
+    label.className = 'sources-label';
+    label.textContent = 'Sources';
+    srcDiv.appendChild(label);
+    sources.forEach(s => {
+      const item = document.createElement('div');
+      item.className = 'source-item';
+      item.innerHTML = `<span class="source-page">Page ${s.page}</span> — ${s.snippet}...`;
+      srcDiv.appendChild(item);
+    });
+    bubble.appendChild(srcDiv);
+  }
+
+  msg.appendChild(avatar);
+  msg.appendChild(bubble);
+  area.appendChild(msg);
+  area.scrollTop = area.scrollHeight;
+}
+
+function addTyping() {
+  const area = document.getElementById('chatArea');
+  const id = 'typing_' + Date.now();
+  const msg = document.createElement('div');
+  msg.className = 'message ai';
+  msg.id = id;
+  msg.innerHTML = `
+    <div class="avatar ai">🧠</div>
+    <div class="bubble"><div class="typing"><span></span><span></span><span></span></div></div>`;
+  area.appendChild(msg);
+  area.scrollTop = area.scrollHeight;
+  return id;
+}
+
+function removeTyping(id) {
+  const el = document.getElementById(id);
+  if (el) el.remove();
+}
+
+function showError(msg) {
+  addMessage('ai', '⚠️ ' + msg);
+}
+
+function clearChat() {
+  const area = document.getElementById('chatArea');
+  const msgs = area.querySelectorAll('.message');
+  msgs.forEach(m => m.remove());
+}
+
+function useTip(el) {
+  const input = document.getElementById('questionInput');
+  if (!sessionId) return;
+  input.value = el.textContent;
+  autoResize(input);
+  input.focus();
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendQuestion();
+  }
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+
+function setProgress(pct) {
+  document.getElementById('loadingBar').style.width = pct + '%';
+}
+</script>
+</body>
+</html>
