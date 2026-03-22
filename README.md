@@ -109,9 +109,6 @@ python -m http.server 3000
 B.E. Computer Science Engineering — 2026 Batch
 Jai Shriram Engineering College, Tiruppur, Tamil Nadu
 
-- GitHub: github.com/yourusername
-- LinkedIn: linkedin.com/in/yourprofile
-
 ---
 
 ## License
